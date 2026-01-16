@@ -85,7 +85,7 @@ def build_base():
     # Front/back walls: tabs span along X, thickness across Y equals WALL
     # Skip front wall (y_sign=-1) since it's fully cut out for Fresnel opening
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (-1,):  # Only back wall
+    for y_sign in (-1,):  # Pin connector side
         for x in x_positions:
             tab_fb = (
                 cq.Workplane("XY")
@@ -145,7 +145,7 @@ def build_lid():
     slot_w = TAB_W + RIM_CLEARANCE
     slot_y_thickness = WALL + RIM_CLEARANCE
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (1,):  # Only back wall slots
+    for y_sign in (-1,):  # Pin connector side slots
         for x in x_positions:
             slot_fb = (
                 cq.Workplane("XY")
