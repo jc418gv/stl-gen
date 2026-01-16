@@ -72,20 +72,20 @@ def build_base():
     )
     base = base.cut(pin_cutter)
 
-    # Front-face Fresnel opening: centered, 24 mm wide, full wall height (avoid cutting floor)
-    fresnel_w = 24.0
-    half_fw = fresnel_w / 2.0
+    # Front-face Fresnel opening: spans entire width and height for unobstructed sensor insertion
+    fresnel_w = outer_y
     fresnel_cutter = (
         cq.Workplane("XZ").workplane(offset=-outer_y / 2)
-        .rect(fresnel_w, outer_z - WALL)
+        .rect(fresnel_w, outer_z)
         .extrude(WALL + EXTRUDE_MARGIN, both=True)
     )
     base = base.cut(fresnel_cutter)
 
     # Add vertical tabs on TOP of walls (z-axis); outside the interior opening
     # Front/back walls: tabs span along X, thickness across Y equals WALL
+    # Skip front wall (y_sign=-1) since it's fully cut out for Fresnel opening
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (1, -1):
+    for y_sign in (-1,):  # Only back wall
         for x in x_positions:
             tab_fb = (
                 cq.Workplane("XY")
@@ -145,7 +145,7 @@ def build_lid():
     slot_w = TAB_W + RIM_CLEARANCE
     slot_y_thickness = WALL + RIM_CLEARANCE
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (1, -1):
+    for y_sign in (1,):  # Only back wall slots
         for x in x_positions:
             slot_fb = (
                 cq.Workplane("XY")
