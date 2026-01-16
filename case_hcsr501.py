@@ -42,10 +42,10 @@ def build_base():
     base = base.faces("+Z").shell(-WALL)  # open top shell; negative for inward shell
 
     # Add a small outer chamfer on the top edge for easier lid seating (if edges exist)
-    try:
-        base = base.edges("|Z and >Z").chamfer(0.6)
-    except ValueError:
-        pass
+    # try:
+    #     base = base.edges("|Z and >Z").chamfer(0.6)
+    # except ValueError:
+    #     pass
 
     # Back-face pin opening with tapered top
     # Coordinates on XZ plane of +Y face; origin at face center (x,z), y=const
@@ -76,35 +76,34 @@ def build_base():
     fresnel_w = outer_y
     fresnel_cutter = (
         cq.Workplane("XZ").workplane(offset=-outer_y / 2)
-        .rect(fresnel_w, INNER_Z)
-        .translate((0, 0, WALL / 2))
-        .extrude(WALL + EXTRUDE_MARGIN, both=True)
+        .rect(fresnel_w, INNER_Z - WALL)
+        .translate((0, 0, WALL))
+        .extrude(WALL * 2, both=True)
     )
     base = base.cut(fresnel_cutter)
 
-    # Add vertical tabs on TOP of walls (z-axis); outside the interior opening
-    # Front/back walls: tabs span along X, thickness across Y equals WALL
-    # Skip front wall (y_sign=-1) since it's fully cut out for Fresnel opening
+    # Cut cutouts in the top frame for lid tabs
+    # Front/back cutouts
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (-1,):  # Pin connector side
+    for y_sign in (1, -1):  # Both sides
         for x in x_positions:
-            tab_fb = (
+            cutout_fb = (
                 cq.Workplane("XY")
-                .box(TAB_W, WALL, TAB_H)
-                .translate((x, y_sign * (INNER_Y / 2 + WALL / 2), (outer_z / 2 + TAB_H / 2)))
+                .box(TAB_W + RIM_CLEARANCE, WALL + RIM_CLEARANCE, WALL)
+                .translate((x, y_sign * (outer_y / 2 - WALL / 2), outer_z / 2 - WALL / 2))
             )
-            base = base.union(tab_fb)
+            base = base.cut(cutout_fb)
 
-    # Left/right walls: tabs span along Y, thickness across X equals WALL
+    # Left/right cutouts
     y_positions = [-(INNER_Y / 2 - TAB_W / 2 - 4.0), (INNER_Y / 2 - TAB_W / 2 - 4.0)]
     for x_sign in (1, -1):
         for y in y_positions:
-            tab_lr = (
+            cutout_lr = (
                 cq.Workplane("XY")
-                .box(WALL, TAB_W, TAB_H)
-                .translate((x_sign * (INNER_X / 2 + WALL / 2), y, (outer_z / 2 + TAB_H / 2)))
+                .box(WALL + RIM_CLEARANCE, TAB_W + RIM_CLEARANCE, WALL)
+                .translate((x_sign * (outer_x / 2 - WALL / 2), y, outer_z / 2 - WALL / 2))
             )
-            base = base.union(tab_lr)
+            base = base.cut(cutout_lr)
 
     return base
 
@@ -126,45 +125,36 @@ def build_lid():
     )
     lid = lid.union(lip)
 
-    # Add an OUTER rim (outside walls) that drops down; cutouts match wall-top tabs
-    rim_outer = (
+    # Add extension on the Fresnel-edge of the lid, extruding in Z by wall height
+    fresnel_edge_extension = (
         cq.Workplane("XY")
-        .workplane(offset=-RIM_HEIGHT)
-        .rect(outer_x, outer_y)
-        .extrude(RIM_HEIGHT)
+        .box(outer_x, WALL, WALL)
+        .translate((0, -outer_y / 2, -LID_THICK / 2 - WALL / 2))
     )
-    rim_inner = (
-        cq.Workplane("XY")
-        .workplane(offset=-RIM_HEIGHT)
-        .rect(outer_x - 2 * WALL, outer_y - 2 * WALL)
-        .extrude(RIM_HEIGHT)
-    )
-    rim = rim_outer.cut(rim_inner)
-    lid = lid.union(rim)
+    lid = lid.union(fresnel_edge_extension)
 
-    # Cut matching slots in the OUTER rim to accommodate the vertical tabs
-    slot_w = TAB_W + RIM_CLEARANCE
-    slot_y_thickness = WALL + RIM_CLEARANCE
+    # Add tabs protruding down from the lid bottom
+    # Front/back tabs
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (-1,):  # Pin connector side slots
+    for y_sign in (1, -1):  # Both sides
         for x in x_positions:
-            slot_fb = (
+            tab_fb = (
                 cq.Workplane("XY")
-                .box(slot_w, slot_y_thickness, RIM_HEIGHT)
-                .translate((x, y_sign * (outer_y / 2 - WALL / 2), -RIM_HEIGHT / 2))
+                .box(TAB_W, WALL, TAB_H)
+                .translate((x, y_sign * outer_y / 2, -LID_THICK / 2 - TAB_H / 2))
             )
-            lid = lid.cut(slot_fb)
+            lid = lid.union(tab_fb)
 
+    # Left/right tabs
     y_positions = [-(INNER_Y / 2 - TAB_W / 2 - 4.0), (INNER_Y / 2 - TAB_W / 2 - 4.0)]
-    slot_x_thickness = WALL + RIM_CLEARANCE
     for x_sign in (1, -1):
         for y in y_positions:
-            slot_lr = (
+            tab_lr = (
                 cq.Workplane("XY")
-                .box(slot_x_thickness, slot_w, RIM_HEIGHT)
-                .translate((x_sign * (outer_x / 2 - WALL / 2), y, -RIM_HEIGHT / 2))
+                .box(WALL, TAB_W, TAB_H)
+                .translate((x_sign * outer_x / 2, y, -LID_THICK / 2 - TAB_H / 2))
             )
-            lid = lid.cut(slot_lr)
+            lid = lid.union(tab_lr)
 
     # Chamfer outer top edges for feel
     try:
