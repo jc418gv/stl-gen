@@ -18,6 +18,13 @@ LID_THICK = 2.0
 SLOT_W = 6.0  # along X (slot width)
 SLOT_CLEAR_BOTTOM = 1.5  # gap from base bottom to slot bottom
 SLOT_MARGIN = 0.5  # extra cut margin
+TAB_W = 6.0
+TAB_H = 1.2
+RIM_CLEARANCE = 0.3
+ 
+# Lid lip fit (match style in case_hcsr501.py)
+LIP_HEIGHT = 1.2
+LIP_CLEARANCE = 0.25
 
 OUT_DIR = Path(__file__).parent / "stl-draft"
 OUT_DIR.mkdir(exist_ok=True)
@@ -61,6 +68,27 @@ def build_base():
     slot_cutter = rect_cut.union(circ_cut)
     base = base.cut(slot_cutter)
 
+    # Cut cutouts in the top frame for lid tabs (peg holes)
+    x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
+    for y_sign in (1, -1):
+        for x in x_positions:
+            cutout_fb = (
+                cq.Workplane("XY")
+                .box(TAB_W + RIM_CLEARANCE, WALL + RIM_CLEARANCE, WALL)
+                .translate((x, y_sign * (outer_y / 2 - WALL / 2), outer_z / 2 - WALL / 2))
+            )
+            base = base.cut(cutout_fb)
+
+    y_positions = [-(INNER_Y / 2 - TAB_W / 2 - 4.0), (INNER_Y / 2 - TAB_W / 2 - 4.0)]
+    for x_sign in (1, -1):
+        for y in y_positions:
+            cutout_lr = (
+                cq.Workplane("XY")
+                .box(WALL + RIM_CLEARANCE, TAB_W + RIM_CLEARANCE, WALL)
+                .translate((x_sign * (outer_x / 2 - WALL / 2), y, outer_z / 2 - WALL / 2))
+            )
+            base = base.cut(cutout_lr)
+
     return base
 
 
@@ -70,14 +98,44 @@ def build_lid():
 
     lid = cq.Workplane("XY").box(outer_x, outer_y, LID_THICK)
 
-    # Simple inset lip for fit
-    lip_inner_x = INNER_X - 2 * 0.25
-    lip_inner_y = INNER_Y - 2 * 0.25
+    # Add an inset lip that drops inside the case for a snug fit
+    lip_inner_x = INNER_X - 2 * LIP_CLEARANCE
+    lip_inner_y = INNER_Y - 2 * LIP_CLEARANCE
     lip = (
-        cq.Workplane("XY").workplane(offset=-1.2).rect(lip_inner_x, lip_inner_y).extrude(1.2)
+        cq.Workplane("XY")
+        .workplane(offset=-LIP_HEIGHT)
+        .rect(lip_inner_x, lip_inner_y)
+        .extrude(LIP_HEIGHT)
     )
     lid = lid.union(lip)
 
+    # Add tabs protruding down from the lid bottom so they line up with
+    # the peg holes cut in the base above.
+    x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
+    for y_sign in (1, -1):
+        for x in x_positions:
+            tab_fb = (
+                cq.Workplane("XY")
+                .box(TAB_W, WALL, TAB_H)
+                .translate((x, y_sign * (outer_y / 2 - WALL / 2), -LID_THICK / 2 - TAB_H / 2))
+            )
+            lid = lid.union(tab_fb)
+
+    y_positions = [-(INNER_Y / 2 - TAB_W / 2 - 4.0), (INNER_Y / 2 - TAB_W / 2 - 4.0)]
+    for x_sign in (1, -1):
+        for y in y_positions:
+            tab_lr = (
+                cq.Workplane("XY")
+                .box(WALL, TAB_W, TAB_H)
+                .translate((x_sign * (outer_x / 2 - WALL / 2), y, -LID_THICK / 2 - TAB_H / 2))
+            )
+            lid = lid.union(tab_lr)
+
+    # Chamfer outer top edges for feel (same as HC-SR501 lid)
+    try:
+        lid = lid.edges("|Z and >Z").chamfer(0.6)
+    except ValueError:
+        pass
     return lid
 
 

@@ -150,7 +150,7 @@ def build_lid():
             tab_fb = (
                 cq.Workplane("XY")
                 .box(TAB_W, WALL, TAB_H)
-                .translate((x, y_sign * outer_y / 2, -LID_THICK / 2 - TAB_H / 2))
+                .translate((x, y_sign * (outer_y / 2 - WALL / 2), -LID_THICK / 2 - TAB_H / 2))
             )
             lid = lid.union(tab_fb)
 
@@ -161,7 +161,7 @@ def build_lid():
             tab_lr = (
                 cq.Workplane("XY")
                 .box(WALL, TAB_W, TAB_H)
-                .translate((x_sign * outer_x / 2, y, -LID_THICK / 2 - TAB_H / 2))
+                .translate((x_sign * (outer_x / 2 - WALL / 2), y, -LID_THICK / 2 - TAB_H / 2))
             )
             lid = lid.union(tab_lr)
 
