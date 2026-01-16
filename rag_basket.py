@@ -51,19 +51,28 @@ def make_rag_basket(
     model = cq.Workplane("XY").box(width, depth, height)
     model = model.faces("+Z").shell(wall_thickness)
 
-    # Slot on front (+Y): create an explicit cutter on a global XZ workplane
+    # Slot: place the slot along the long edge of the footprint
     slot_cut_height = height * slot_depth_ratio
     margin = 5.0
     total_cut_h = slot_cut_height + margin
     cut_center_z = height / 2 - slot_cut_height / 2 + margin / 2
 
-    # Build a rectangular cutter and place it so it starts at the outer front face and extrudes inward
-    cutter = (
-        cq.Workplane("XZ")
-        .rect(slot_width, total_cut_h)
-        .extrude(-(depth + 10))  # long enough to cut fully through the front area
-        .translate((0, depth / 2, cut_center_z))
-    )
+    if depth > width:
+        # Long edge is along Y (depth). Place slot on +X face so slot width aligns with Y.
+        cutter = (
+            cq.Workplane("YZ")
+            .rect(slot_width, total_cut_h)
+            .extrude(-(width + 10))  # extrude through +X face
+            .translate((width / 2, 0, cut_center_z))
+        )
+    else:
+        # Long edge is along X (width) or equal: place slot on +Y face (original behavior)
+        cutter = (
+            cq.Workplane("XZ")
+            .rect(slot_width, total_cut_h)
+            .extrude(-(depth + 10))  # long enough to cut fully through the front area
+            .translate((0, depth / 2, cut_center_z))
+        )
     model = model.cut(cutter)
 
     # Diamond profile defined inline per-face (no shared intermediate variable)
