@@ -57,6 +57,11 @@ def make_rag_basket(
     total_cut_h = slot_cut_height + margin
     cut_center_z = height / 2 - slot_cut_height / 2 + margin / 2
 
+    # We'll compute slot bounds and use simple coordinate tests to decide
+    # when to skip diamonds that would overlap the slot opening. Avoid
+    # geometric intersection checks which can erroneously detect the
+    # opposite face when cutters extrude through the part.
+
     if depth > width:
         # Long edge is along Y (depth). Place slot on +X face so slot width aligns with Y.
         cutter = (
@@ -65,6 +70,12 @@ def make_rag_basket(
             .extrude(-(width + 10))  # extrude through +X face
             .translate((width / 2, 0, cut_center_z))
         )
+        # slot on +X face: define horizontal and vertical spans
+        slot_face = "+X"
+        slot_horiz_center = 0.0  # Y-axis center for the slot rect
+        slot_horiz_half = slot_width / 2
+        slot_min_z = cut_center_z - total_cut_h / 2
+        slot_max_z = cut_center_z + total_cut_h / 2
     else:
         # Long edge is along X (width) or equal: place slot on +Y face (original behavior)
         cutter = (
@@ -73,6 +84,12 @@ def make_rag_basket(
             .extrude(-(depth + 10))  # long enough to cut fully through the front area
             .translate((0, depth / 2, cut_center_z))
         )
+        # slot on +Y face: define horizontal and vertical spans
+        slot_face = "+Y"
+        slot_horiz_center = 0.0  # X-axis center for the slot rect
+        slot_horiz_half = slot_width / 2
+        slot_min_z = cut_center_z - total_cut_h / 2
+        slot_max_z = cut_center_z + total_cut_h / 2
     model = model.cut(cutter)
 
     # Diamond profile defined inline per-face (no shared intermediate variable)
@@ -83,106 +100,162 @@ def make_rag_basket(
         This avoids selecting faces and using `.workplane()` which can fail when multiple
         coplanar or inner/outer faces are present.
         """
-        # Determine usable face sizes based on outer dims and wall thickness
+        # Build a list of cutters (TopoDS shapes) and return them. This keeps
+        # the lattice generation consistent with diagnostic logic and avoids
+        # applying cuts inside this helper (caller will apply them).
         if face_selector in ("-Y", "+Y"):
             face_w = width - 2 * wall_thickness
-            face_h = height - wall_thickness  # top is open
-        else:  # X-facing
+            face_h = height - wall_thickness
+            plane = "XZ"
+            depth_extra = depth + 10
+        else:
             face_w = depth - 2 * wall_thickness
             face_h = height - wall_thickness
+            plane = "YZ" if face_selector in ("+X", "-X") else "XZ"
+            depth_extra = width + 10
 
-        usable_w = face_w - 2 * lattice_offset_edge
+        # Allow diamonds to reach side edges; keep vertical clearance from top/bottom
+        usable_w = face_w
         usable_h = face_h - 2 * lattice_offset_edge
+        nx = int(max(0, usable_w) / (diamond_width + diamond_spacing_x))
+        ny = int(max(0, usable_h) / (diamond_height + diamond_spacing_y))
 
-        nx = int(usable_w / (diamond_width + diamond_spacing_x))
-        ny = int(usable_h / (diamond_height + diamond_spacing_y))
-
+        cutters = []
         if nx <= 0 or ny <= 0:
-            return cad_obj
+            return cutters
 
         grid_total_w = nx * diamond_width + (nx - 1) * diamond_spacing_x
         grid_total_h = ny * diamond_height + (ny - 1) * diamond_spacing_y
 
-        points = []
+        # Stagger rows so diamonds interlock
         for j in range(ny):
+            row_offset = (diamond_width + diamond_spacing_x) / 2.0 if (j % 2) == 1 else 0.0
             for i in range(nx):
-                lx = -grid_total_w / 2 + diamond_width / 2 + i * (
-                    diamond_width + diamond_spacing_x
+                lx = (
+                    -grid_total_w / 2
+                    + diamond_width / 2
+                    + i * (diamond_width + diamond_spacing_x)
+                    + row_offset
                 )
-                lz = -grid_total_h / 2 + diamond_height / 2 + j * (
-                    diamond_height + diamond_spacing_y
-                )
-                points.append((lx, lz))
+                lz = -grid_total_h / 2 + diamond_height / 2 + j * (diamond_height + diamond_spacing_y)
 
-        # For each face, create diamond cutters in the correct plane and translate them to face coordinate
-        for (px, pz) in points:
-            if face_selector == "-Y":
-                # plane XZ, face y = -depth/2
-                cutter = (
-                    cq.Workplane("XZ")
-                    .polyline([
-                        (0, diamond_height / 2),
-                        (diamond_width / 2, 0),
-                        (0, -diamond_height / 2),
-                        (-diamond_width / 2, 0),
-                    ])
-                    .close()
-                    .extrude(depth + 10)
-                    .val()
-                    .moved(cq.Location(cq.Vector(px, -depth / 2, pz)))
-                )
-            elif face_selector == "+X":
-                # plane YZ, face x = width/2
-                cutter = (
-                    cq.Workplane("YZ")
-                    .polyline([
-                        (0, diamond_height / 2),
-                        (diamond_width / 2, 0),
-                        (0, -diamond_height / 2),
-                        (-diamond_width / 2, 0),
-                    ])
-                    .close()
-                    .extrude(width + 10)
-                    .val()
-                    .moved(cq.Location(cq.Vector(width / 2, px, pz)))
-                )
-            elif face_selector == "-X":
-                cutter = (
-                    cq.Workplane("YZ")
-                    .polyline([
-                        (0, diamond_height / 2),
-                        (diamond_width / 2, 0),
-                        (0, -diamond_height / 2),
-                        (-diamond_width / 2, 0),
-                    ])
-                    .close()
-                    .extrude(width + 10)
-                    .val()
-                    .moved(cq.Location(cq.Vector(-width / 2, px, pz)))
-                )
-            else:  # +Y or others
-                cutter = (
-                    cq.Workplane("XZ")
-                    .polyline([
-                        (0, diamond_height / 2),
-                        (diamond_width / 2, 0),
-                        (0, -diamond_height / 2),
-                        (-diamond_width / 2, 0),
-                    ])
-                    .close()
-                    .extrude(depth + 10)
-                    .val()
-                    .moved(cq.Location(cq.Vector(px, depth / 2, pz)))
-                )
+                # Determine which face contains the slot (mirror of slot placement above)
+                slot_face = "+X" if depth > width else "+Y"
+                # We want to skip diamonds on the face opposite the slot face
+                opposite_face = {"+X": "-X", "-X": "+X", "+Y": "-Y", "-Y": "+Y"}[slot_face]
+                # Compute vertical bounds of the slot area so we can keep clearance
+                slot_cut_height = height * slot_depth_ratio
+                margin = 5.0
+                total_cut_h = slot_cut_height + margin
+                cut_center_z = height / 2 - slot_cut_height / 2 + margin / 2
+                slot_min_z = cut_center_z - total_cut_h / 2
+                slot_max_z = cut_center_z + total_cut_h / 2
 
-            cad_obj = cad_obj.cut(cutter)
+                # Skip diamonds overlapping the slot region on the face opposite
+                # the slot face (user requested). Use `lattice_offset_edge` as horizontal/vertical clearance.
+                horiz_clear = slot_width / 2 + lattice_offset_edge
+                # Compute global center coordinates for this diamond on the model
+                if face_selector == "-Y":
+                    center = (lx, -depth / 2, lz)
+                elif face_selector == "+Y":
+                    center = (lx, depth / 2, lz)
+                elif face_selector == "+X":
+                    center = (width / 2, lx, lz)
+                elif face_selector == "-X":
+                    center = (-width / 2, lx, lz)
+                else:
+                    center = (lx, 0, lz)
 
-        return cad_obj
+                cx, cy, cz = center
+                # If this face is the opposite face to the slot, test the appropriate
+                # horizontal coordinate (Y for X-facing slot, X for Y-facing slot)
+                # and the vertical (Z) span before skipping.
+                # Use a short symmetric extrusion length for diamonds
+                extrude_len = wall_thickness + 2.0
 
-    for side in ["-Y", "+X", "-X"]:
+                # Use coordinate tests against the computed slot bounding area
+                # to decide skipping. This avoids false positives from full
+                # through-thickness geometric cutters intersecting opposite faces.
+                if face_selector == opposite_face:
+                    if slot_face.endswith("X"):
+                        within_horiz = abs(cy - slot_horiz_center) < (slot_horiz_half + lattice_offset_edge)
+                    else:
+                        within_horiz = abs(cx - slot_horiz_center) < (slot_horiz_half + lattice_offset_edge)
+                    within_vert = (cz > (slot_min_z - lattice_offset_edge)) and (cz < (slot_max_z + lattice_offset_edge))
+                    if within_horiz and within_vert:
+                        continue
+
+                # Use a short symmetric extrusion so cutter only penetrates the
+                # wall thickness (with a small margin) and align it on the face
+                # plane before moving into place.
+                extrude_len = wall_thickness + 2.0
+                if face_selector == "-Y":
+                    cutter = (
+                        cq.Workplane("XZ")
+                        .polyline([
+                            (0, diamond_height / 2),
+                            (diamond_width / 2, 0),
+                            (0, -diamond_height / 2),
+                            (-diamond_width / 2, 0),
+                        ])
+                        .close()
+                        .extrude(extrude_len, both=True)
+                        .val()
+                        .moved(cq.Location(cq.Vector(cx, cy, cz)))
+                    )
+                elif face_selector == "+X":
+                    cutter = (
+                        cq.Workplane("YZ")
+                        .polyline([
+                            (0, diamond_height / 2),
+                            (diamond_width / 2, 0),
+                            (0, -diamond_height / 2),
+                            (-diamond_width / 2, 0),
+                        ])
+                        .close()
+                        .extrude(extrude_len, both=True)
+                        .val()
+                        .moved(cq.Location(cq.Vector(cx, cy, cz)))
+                    )
+                elif face_selector == "-X":
+                    cutter = (
+                        cq.Workplane("YZ")
+                        .polyline([
+                            (0, diamond_height / 2),
+                            (diamond_width / 2, 0),
+                            (0, -diamond_height / 2),
+                            (-diamond_width / 2, 0),
+                        ])
+                        .close()
+                        .extrude(extrude_len, both=True)
+                        .val()
+                        .moved(cq.Location(cq.Vector(cx, cy, cz)))
+                    )
+                else:  # +Y or others
+                    cutter = (
+                        cq.Workplane("XZ")
+                        .polyline([
+                            (0, diamond_height / 2),
+                            (diamond_width / 2, 0),
+                            (0, -diamond_height / 2),
+                            (-diamond_width / 2, 0),
+                        ])
+                        .close()
+                        .extrude(extrude_len, both=True)
+                        .val()
+                        .moved(cq.Location(cq.Vector(cx, cy, cz)))
+                    )
+
+                cutters.append(cutter)
+
+        return cutters
+
+    # Apply cutters returned from the helper (iterate per-cutter for clarity).
+    # Include both perpendicular walls (-Y and +Y) so both are cut.
+    for side in ["-Y", "+Y", "+X", "-X"]:
         cutters = create_lattice_for_face(model, side)
-        if cutters:
-            model = model.cut(cutters)
+        for c in cutters:
+            model = model.cut(c)
 
     return model
 
@@ -214,10 +287,12 @@ if __name__ == "__main__":
     if args.final:
         out_dir = script_dir / "stl-final"
     else:
-        out_dir = Path(args.out_dir) if args.out_dir else script_dir / "stl-draft"
-        # If passed a relative path, resolve it relative to script dir
-        if not out_dir.is_absolute():
-            out_dir = script_dir / out_dir
+        if args.out_dir:
+            out_dir = Path(args.out_dir)
+            if not out_dir.is_absolute():
+                out_dir = (Path.cwd() / out_dir).resolve()
+        else:
+            out_dir = script_dir / "stl-draft"
 
     out_path = export_stl(result, str(out_dir), args.filename)
     print(f"Generated {out_path}")
