@@ -78,14 +78,14 @@ def build_base():
         cq.Workplane("XZ").workplane(offset=-outer_y / 2)
         .rect(fresnel_w, INNER_Z - WALL)
         .translate((0, 0, WALL))
-        .extrude(WALL * 2, both=True)
+        .extrude(27, both=True)
     )
     base = base.cut(fresnel_cutter)
 
     # Cut cutouts in the top frame for lid tabs
     # Front/back cutouts
     x_positions = [-(INNER_X / 2 - TAB_W / 2 - 4.0), (INNER_X / 2 - TAB_W / 2 - 4.0)]
-    for y_sign in (1, -1):  # Both sides
+    for y_sign in (-1,):  # Cut tabs for the solid long wall (that the pins plug into)
         for x in x_positions:
             cutout_fb = (
                 cq.Workplane("XY")
@@ -93,6 +93,15 @@ def build_base():
                 .translate((x, y_sign * (outer_y / 2 - WALL / 2), outer_z / 2 - WALL / 2))
             )
             base = base.cut(cutout_fb)
+
+    # Cut out the other long wall entirely as a single full-height notch
+    # Span full Z (outer_z) and extend into the side walls so no floating pieces remain
+    cutout_long_wall = (
+        cq.Workplane("XY")
+        .box(outer_x + 2 * WALL, WALL + RIM_CLEARANCE, WALL)
+        .translate((0, outer_y / 2 - (WALL + RIM_CLEARANCE) / 2, outer_z / 2 - WALL / 2))
+    )
+    base = base.cut(cutout_long_wall)
 
     # Left/right cutouts
     y_positions = [-(INNER_Y / 2 - TAB_W / 2 - 4.0), (INNER_Y / 2 - TAB_W / 2 - 4.0)]
