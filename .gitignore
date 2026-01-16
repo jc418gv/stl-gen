@@ -1,0 +1,16 @@
+# Ignore draft STL outputs (keep the folder tracked via .gitkeep)
+/stl-draft/*
+!/stl-draft/.gitkeep
+
+# Keep final, validated STLs tracked
+# /stl-final/   (do not ignore)
+
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Local virtual environment (if created under repo)
+.venv/
+
+# Editor files
+.vscode/

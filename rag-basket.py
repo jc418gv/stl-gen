@@ -1,3 +1,4 @@
+import os
 import cadquery as cq
 
 # --- Parameters ---
@@ -132,9 +133,13 @@ for side in ["-Y", "+X", "-X"]:
 
 
 # --- Export ---
-output_filename = 'rag_basket.stl'
+# Ensure draft folder exists and export there
+output_dir = "stl-draft"
+os.makedirs(output_dir, exist_ok=True)
+output_filename = os.path.join(output_dir, 'rag_basket.stl')
 cq.exporters.export(result, output_filename)
 print(f"Generated {output_filename}")
+print('Tip: move validated prints into `stl-final/` to track them in Git.')
 
 # For CQ-editor interaction (optional)
 # show_object(result)
