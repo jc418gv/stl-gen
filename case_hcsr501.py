@@ -76,7 +76,8 @@ def build_base():
     fresnel_w = outer_y
     fresnel_cutter = (
         cq.Workplane("XZ").workplane(offset=-outer_y / 2)
-        .rect(fresnel_w, outer_z)
+        .rect(fresnel_w, INNER_Z)
+        .translate((0, 0, WALL / 2))
         .extrude(WALL + EXTRUDE_MARGIN, both=True)
     )
     base = base.cut(fresnel_cutter)
