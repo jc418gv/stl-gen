@@ -138,7 +138,9 @@ def build_lid():
     fresnel_edge_extension = (
         cq.Workplane("XY")
         .box(outer_x, WALL, WALL)
-        .translate((0, -outer_y / 2, -LID_THICK / 2 - WALL / 2))
+        # Move the center inside by WALL/2 so the outer face is coplanar
+        # with the lid outer face (center at -outer_y/2 + WALL/2).
+        .translate((0, -outer_y / 2 + WALL / 2, -LID_THICK / 2 - WALL / 2))
     )
     lid = lid.union(fresnel_edge_extension)
 
